@@ -9,6 +9,7 @@ from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
 from binance_p2p import obtener_ofertas_p2p_binance, calcular_precio_promedio
 from bitcoin_value import obtener_precio_bitcoin_usd
+from analisis_tendencias import analizar_tendencias, ejecutar_una_vez as ejecutar_analisis_una_vez
 
 # Configurar logging
 logging.basicConfig(
@@ -180,20 +181,42 @@ def tarea_programada():
     except Exception as e:
         logger.error(f"Error en la tarea programada: {str(e)}")
 
+def configurar_tareas_programadas():
+    """
+    Configura todas las tareas programadas del sistema.
+    """
+    # Obtener intervalo de actualización desde variables de entorno
+    intervalo_datos = int(os.getenv("UPDATE_INTERVAL", "10"))
+    intervalo_analisis = int(os.getenv("ANALYSIS_INTERVAL", "240"))  # 4 horas por defecto (en minutos)
+    
+    # Programar recolección de datos
+    schedule.every(intervalo_datos).minutes.do(tarea_programada)
+    logger.info(f"Tarea de recolección de datos programada cada {intervalo_datos} minutos")
+    
+    # Programar análisis de tendencias
+    schedule.every(intervalo_analisis).minutes.do(analizar_tendencias)
+    logger.info(f"Tarea de análisis de tendencias programada cada {intervalo_analisis} minutos")
+    
+    # Calcular próximas ejecuciones
+    proxima_recoleccion = schedule.next_run()
+    logger.info(f"Próxima recolección de datos: {proxima_recoleccion}")
+
 if __name__ == "__main__":
     try:
-        # Obtener intervalo de actualización desde variables de entorno
-        intervalo = int(os.getenv("UPDATE_INTERVAL", "10"))
+        logger.info("Iniciando servicio de monitoreo y análisis de criptomonedas")
         
-        logger.info(f"Iniciando servicio de monitoreo de criptomonedas. Intervalo: {intervalo} minutos")
-        
-        # Ejecutar inmediatamente al iniciar
+        # Ejecutar inmediatamente las tareas al iniciar
+        logger.info("Ejecutando recolección de datos inicial...")
         tarea_programada()
         
-        # Programar ejecución periódica
-        schedule.every(intervalo).minutes.do(tarea_programada)
+        logger.info("Ejecutando análisis de tendencias inicial...")
+        ejecutar_analisis_una_vez()
+        
+        # Configurar tareas programadas
+        configurar_tareas_programadas()
         
         # Bucle principal
+        logger.info("Iniciando bucle principal de tareas programadas")
         while True:
             schedule.run_pending()
             time.sleep(1)
